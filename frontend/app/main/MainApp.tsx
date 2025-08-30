@@ -16,8 +16,7 @@ interface MainAppProps {
 
 export default function MainApp({ userId, onResetOnboarding }: MainAppProps) {
   return (
-    <NavigationContainer independent={true}>
-      <Tab.Navigator
+    <Tab.Navigator
         screenOptions={({ route }) => ({
           tabBarIcon: ({ focused, color, size }) => {
             let iconName: keyof typeof Ionicons.glyphMap;
