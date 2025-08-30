@@ -159,15 +159,19 @@ class MedMindAPITester:
         }
         
         try:
-            # Try sending as proper multipart form data
-            import io
-            json_file = io.StringIO(json.dumps(medication_data))
-            files = {
-                'medication': json_file,
-                'user_id': (None, self.test_user_id)
+            # The FastAPI endpoint has a problematic design mixing JSON body with Form data
+            # Let's try sending everything as form data instead
+            form_data = {
+                'user_id': self.test_user_id,
+                'name': medication_data['name'],
+                'dosage': medication_data['dosage'],
+                'frequency': medication_data['frequency'],
+                'time_slots': json.dumps(medication_data['time_slots']),
+                'total_pills': str(medication_data['total_pills']),
+                'refill_info': json.dumps(medication_data['refill_info']),
+                'prescription_image': medication_data['prescription_image']
             }
-            headers = {'Content-Type': 'multipart/form-data'}
-            response = self.session.post(f"{self.base_url}/medications", files=files)
+            response = self.session.post(f"{self.base_url}/medications", data=form_data)
             if response.status_code == 200:
                 medication = response.json()
                 self.test_medication_id = medication["id"]
