@@ -56,7 +56,6 @@ export default function MainApp({ userId, onResetOnboarding }: MainAppProps) {
           {(props) => <SettingsScreen {...props} userId={userId} onResetOnboarding={onResetOnboarding} />}
         </Tab.Screen>
       </Tab.Navigator>
-    </NavigationContainer>
   );
 }
 
