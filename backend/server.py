@@ -391,7 +391,7 @@ async def mark_medication_taken(log_id: str, verification_photo: Optional[str] =
 # Health Journal Routes
 class HealthJournalEntryCreateWithUser(BaseModel):
     user_id: str
-    date: date
+    date: str  # Use string instead of date to avoid BSON issues
     symptoms: List[str] = []
     notes: str = ""
     mood_rating: Optional[int] = None
@@ -403,15 +403,16 @@ async def create_health_journal_entry(entry_data: HealthJournalEntryCreateWithUs
     user_id = entry_dict.pop("user_id")
     entry_dict["user_id"] = user_id
     
-    # Convert date to datetime for MongoDB compatibility
-    if isinstance(entry_dict.get("date"), date):
-        entry_dict["date"] = datetime.combine(entry_dict["date"], datetime.min.time())
+    # Convert string date to date object for the model
+    if isinstance(entry_dict.get("date"), str):
+        entry_dict["date"] = datetime.fromisoformat(entry_dict["date"]).date()
     
     entry_obj = HealthJournalEntry(**entry_dict)
-    # Convert the date back to date object for the model
+    
+    # For MongoDB storage, convert date back to string
     entry_obj_dict = entry_obj.dict()
-    if isinstance(entry_obj_dict.get("date"), datetime):
-        entry_obj_dict["date"] = entry_obj_dict["date"].date()
+    if isinstance(entry_obj_dict.get("date"), date):
+        entry_obj_dict["date"] = entry_obj_dict["date"].isoformat()
     
     await db.health_journal.insert_one(entry_obj_dict)
     return entry_obj
