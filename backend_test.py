@@ -256,12 +256,12 @@ class MedMindAPITester:
         }
         
         try:
-            form_data = {"user_id": self.test_user_id}
-            response = self.session.post(
-                f"{self.base_url}/health-journal",
-                json=journal_data,
-                data=form_data
-            )
+            # Note: The API expects both JSON and form data - this is a FastAPI mixed content type
+            files = {
+                'entry': (None, json.dumps(journal_data), 'application/json'),
+                'user_id': (None, self.test_user_id)
+            }
+            response = self.session.post(f"{self.base_url}/health-journal", files=files)
             if response.status_code == 200:
                 journal_entry = response.json()
                 self.test_journal_entry_id = journal_entry["id"]
