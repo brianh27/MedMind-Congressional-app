@@ -159,12 +159,14 @@ class MedMindAPITester:
         }
         
         try:
-            # Note: The API expects both JSON and form data - this is a FastAPI mixed content type
-            # We need to send as multipart/form-data with JSON as a field
+            # Try sending as proper multipart form data
+            import io
+            json_file = io.StringIO(json.dumps(medication_data))
             files = {
-                'medication': (None, json.dumps(medication_data), 'application/json'),
+                'medication': json_file,
                 'user_id': (None, self.test_user_id)
             }
+            headers = {'Content-Type': 'multipart/form-data'}
             response = self.session.post(f"{self.base_url}/medications", files=files)
             if response.status_code == 200:
                 medication = response.json()
