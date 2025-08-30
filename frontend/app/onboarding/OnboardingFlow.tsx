@@ -117,18 +117,18 @@ export default function OnboardingFlow({ onComplete }: OnboardingFlowProps) {
 
   const validateCurrentStep = (): boolean => {
     switch (currentStep) {
-      case 0: // Age
+      case 0: // Age - only require age to be entered
         return userData.age !== null && userData.age > 0;
-      case 1: // Emergency Contact
-        return userData.emergency_contact.name.length > 0 && userData.emergency_contact.phone.length > 0;
-      case 4: // Contact Info
-        return userData.name.length > 0 && userData.phone_number.length > 0;
-      case 5: // Caregiver Info
-        return userData.caregiver_contact.name.length > 0 && userData.caregiver_contact.phone.length > 0;
-      case 6: // Doctor Info
-        return userData.doctor_contact.name.length > 0 && userData.doctor_contact.phone.length > 0;
+      case 1: // Emergency Contact - allow proceeding even with partial info
+        return userData.emergency_contact.name.length > 0 || userData.emergency_contact.phone.length > 0;
+      case 4: // Contact Info - require at least name
+        return userData.name.length > 0;
+      case 5: // Caregiver Info - allow proceeding even with partial info
+        return userData.caregiver_contact.name.length > 0 || userData.caregiver_contact.phone.length > 0;
+      case 6: // Doctor Info - allow proceeding even with partial info  
+        return userData.doctor_contact.name.length > 0 || userData.doctor_contact.phone.length > 0;
       default:
-        return true;
+        return true; // Allow proceeding on all other steps
     }
   };
 
