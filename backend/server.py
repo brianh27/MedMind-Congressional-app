@@ -389,9 +389,18 @@ async def mark_medication_taken(log_id: str, verification_photo: Optional[str] =
     return {"message": "Medication marked as taken"}
 
 # Health Journal Routes
+class HealthJournalEntryCreateWithUser(BaseModel):
+    user_id: str
+    date: date
+    symptoms: List[str] = []
+    notes: str = ""
+    mood_rating: Optional[int] = None
+    side_effects: List[str] = []
+
 @api_router.post("/health-journal", response_model=HealthJournalEntry)
-async def create_health_journal_entry(entry: HealthJournalEntryCreate, user_id: str = Form(...)):
-    entry_dict = entry.dict()
+async def create_health_journal_entry(entry_data: HealthJournalEntryCreateWithUser):
+    entry_dict = entry_data.dict()
+    user_id = entry_dict.pop("user_id")
     entry_dict["user_id"] = user_id
     entry_obj = HealthJournalEntry(**entry_dict)
     await db.health_journal.insert_one(entry_obj.dict())
