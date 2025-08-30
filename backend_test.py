@@ -262,12 +262,17 @@ class MedMindAPITester:
         }
         
         try:
-            # Note: The API expects both JSON and form data - this is a FastAPI mixed content type
-            files = {
-                'entry': (None, json.dumps(journal_data), 'application/json'),
-                'user_id': (None, self.test_user_id)
+            # The FastAPI endpoint has a problematic design mixing JSON body with Form data
+            # Let's try sending everything as form data instead
+            form_data = {
+                'user_id': self.test_user_id,
+                'date': journal_data['date'],
+                'symptoms': json.dumps(journal_data['symptoms']),
+                'notes': journal_data['notes'],
+                'mood_rating': str(journal_data['mood_rating']),
+                'side_effects': json.dumps(journal_data['side_effects'])
             }
-            response = self.session.post(f"{self.base_url}/health-journal", files=files)
+            response = self.session.post(f"{self.base_url}/health-journal", data=form_data)
             if response.status_code == 200:
                 journal_entry = response.json()
                 self.test_journal_entry_id = journal_entry["id"]
