@@ -220,9 +220,20 @@ async def complete_onboarding(user_id: str):
     return {"message": "Onboarding completed successfully"}
 
 # Medication Routes
+class MedicationCreateWithUser(BaseModel):
+    user_id: str
+    name: str
+    dosage: str
+    frequency: str
+    time_slots: List[str]
+    total_pills: int
+    refill_info: Optional[Dict[str, Any]] = None
+    prescription_image: Optional[str] = None
+
 @api_router.post("/medications", response_model=Medication)
-async def create_medication(medication: MedicationCreate, user_id: str = Form(...)):
-    medication_dict = medication.dict()
+async def create_medication(medication_data: MedicationCreateWithUser):
+    medication_dict = medication_data.dict()
+    user_id = medication_dict.pop("user_id")
     medication_dict["user_id"] = user_id
     medication_dict["remaining_pills"] = medication_dict["total_pills"]
     medication_obj = Medication(**medication_dict)
