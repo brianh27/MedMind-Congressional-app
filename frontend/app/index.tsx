@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { View, StyleSheet, Text, TouchableOpacity, SafeAreaView } from 'react-native';
+import { NavigationContainer } from '@react-navigation/native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useFocusEffect } from '@react-navigation/native';
 import OnboardingFlow from './onboarding/OnboardingFlow';
@@ -68,9 +69,9 @@ export default function Index() {
   }
 
   return (
-    <View style={styles.container}>
+    <NavigationContainer>
       <MainApp userId={userId} onResetOnboarding={resetOnboarding} />
-    </View>
+    </NavigationContainer>
   );
 }
 
