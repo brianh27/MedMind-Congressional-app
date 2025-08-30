@@ -3,7 +3,6 @@ uvicorn[standard]==0.25.0
 motor==3.6.0
 python-dotenv==1.1.1
 pydantic==2.11.7
-pymongo==4.10.1
 emergentintegrations
 python-multipart==0.0.12
 Pillow==10.4.0
