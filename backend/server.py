@@ -402,8 +402,18 @@ async def create_health_journal_entry(entry_data: HealthJournalEntryCreateWithUs
     entry_dict = entry_data.dict()
     user_id = entry_dict.pop("user_id")
     entry_dict["user_id"] = user_id
+    
+    # Convert date to datetime for MongoDB compatibility
+    if isinstance(entry_dict.get("date"), date):
+        entry_dict["date"] = datetime.combine(entry_dict["date"], datetime.min.time())
+    
     entry_obj = HealthJournalEntry(**entry_dict)
-    await db.health_journal.insert_one(entry_obj.dict())
+    # Convert the date back to date object for the model
+    entry_obj_dict = entry_obj.dict()
+    if isinstance(entry_obj_dict.get("date"), datetime):
+        entry_obj_dict["date"] = entry_obj_dict["date"].date()
+    
+    await db.health_journal.insert_one(entry_obj_dict)
     return entry_obj
 
 @api_router.get("/health-journal/{user_id}", response_model=List[HealthJournalEntry])
