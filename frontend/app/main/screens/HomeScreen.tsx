@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import {
   View,
   Text,
@@ -13,6 +13,8 @@ import {
   FlatList,
   Modal,
   Image,
+  TextInput,
+  ActivityIndicator,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useFocusEffect } from '@react-navigation/native';
@@ -33,6 +35,11 @@ interface Medication {
   time_slots: string[];
   remaining_pills: number;
   total_pills: number;
+  refill_info?: {
+    pharmacy_name?: string;
+    address?: string;
+    refill_date?: string;
+  };
 }
 
 interface MedicationLog {
@@ -41,6 +48,14 @@ interface MedicationLog {
   scheduled_time: string;
   status: string;
   taken_at?: string;
+}
+
+interface MedicationTimelineItem {
+  id: string;
+  medication: Medication;
+  scheduled_time: Date;
+  status: 'upcoming' | 'current' | 'taken' | 'missed';
+  log_id?: string;
 }
 
 interface DashboardData {
@@ -57,6 +72,18 @@ export default function HomeScreen({ userId }: HomeScreenProps) {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [missedMedications, setMissedMedications] = useState<MedicationLog[]>([]);
+  const [medicationTimeline, setMedicationTimeline] = useState<MedicationTimelineItem[]>([]);
+  
+  // Camera and verification states
+  const [showVerificationModal, setShowVerificationModal] = useState(false);
+  const [selectedMedication, setSelectedMedication] = useState<MedicationTimelineItem | null>(null);
+  const [verificationStep, setVerificationStep] = useState<'camera' | 'questions' | 'preview' | 'loading' | 'tips'>('camera');
+  const [capturedPhoto, setCapturedPhoto] = useState<string | null>(null);
+  const [verificationAnswers, setVerificationAnswers] = useState<{[key: string]: boolean}>({});
+  const [aiAnalysisResult, setAiAnalysisResult] = useState<any>(null);
+  const [showRefillModal, setShowRefillModal] = useState(false);
+  
+  const timelineRef = useRef<FlatList>(null);
 
   useFocusEffect(
     useCallback(() => {
@@ -77,6 +104,9 @@ export default function HomeScreen({ userId }: HomeScreenProps) {
       const missed = data.today_logs.filter((log: MedicationLog) => log.status === 'missed');
       setMissedMedications(missed);
       
+      // Generate medication timeline
+      generateMedicationTimeline(data.medications, data.today_logs);
+      
     } catch (error) {
       console.error('Error loading dashboard:', error);
       Alert.alert('Error', 'Failed to load data. Please try again.');
@@ -86,67 +116,403 @@ export default function HomeScreen({ userId }: HomeScreenProps) {
     }
   };
 
+  const generateMedicationTimeline = (medications: Medication[], logs: MedicationLog[]) => {
+    const timeline: MedicationTimelineItem[] = [];
+    const now = new Date();
+    const today = now.toDateString();
+    
+    // Generate timeline for the past 7 days and next 7 days
+    for (let dayOffset = -7; dayOffset <= 7; dayOffset++) {
+      const currentDate = new Date();
+      currentDate.setDate(now.getDate() + dayOffset);
+      
+      medications.forEach(medication => {
+        medication.time_slots.forEach(timeSlot => {
+          const [hours, minutes] = timeSlot.split(':').map(Number);
+          const scheduledTime = new Date(currentDate);
+          scheduledTime.setHours(hours, minutes, 0, 0);
+          
+          // Find corresponding log
+          const log = logs.find(l => 
+            l.medication_id === medication.id && 
+            new Date(l.scheduled_time).getTime() === scheduledTime.getTime()
+          );
+          
+          // Determine status
+          let status: MedicationTimelineItem['status'] = 'upcoming';
+          if (scheduledTime < now) {
+            if (log?.status === 'taken') {
+              status = 'taken';
+            } else {
+              status = 'missed';
+            }
+          } else if (scheduledTime.toDateString() === today) {
+            const timeDiff = Math.abs(scheduledTime.getTime() - now.getTime()) / (1000 * 60);
+            if (timeDiff <= 30) { // Within 30 minutes
+              status = 'current';
+            }
+          }
+          
+          timeline.push({
+            id: `${medication.id}-${scheduledTime.getTime()}`,
+            medication,
+            scheduled_time: scheduledTime,
+            status,
+            log_id: log?.id
+          });
+        });
+      });
+    }
+    
+    // Sort by scheduled time and find the most imminent current medication
+    timeline.sort((a, b) => a.scheduled_time.getTime() - b.scheduled_time.getTime());
+    setMedicationTimeline(timeline);
+    
+    // Auto-scroll to current medication
+    setTimeout(() => {
+      const currentIndex = timeline.findIndex(item => item.status === 'current');
+      if (currentIndex !== -1 && timelineRef.current) {
+        timelineRef.current.scrollToIndex({
+          index: Math.max(0, currentIndex - 1),
+          animated: true,
+          viewPosition: 0.3
+        });
+      }
+    }, 500);
+  };
+
   const onRefresh = () => {
     setRefreshing(true);
     loadDashboardData();
   };
 
-  const handleMissedMedicationConfirm = async (logId: string, taken: boolean) => {
+  const handleMedicationPress = (item: MedicationTimelineItem) => {
+    if (item.status === 'current') {
+      setSelectedMedication(item);
+      setVerificationStep('camera');
+      setShowVerificationModal(true);
+    } else if (item.medication.refill_info) {
+      setSelectedMedication(item);
+      setShowRefillModal(true);
+    }
+  };
+
+  const takeMedicationPhoto = async () => {
     try {
-      if (taken) {
-        await fetch(`${BACKEND_URL}/api/medication-logs/${logId}/take`, {
+      const { status } = await ImagePicker.requestCameraPermissionsAsync();
+      if (status !== 'granted') {
+        Alert.alert('Permission needed', 'Camera permission is required to verify medication intake.');
+        return;
+      }
+
+      const result = await ImagePicker.launchCameraAsync({
+        mediaTypes: ImagePicker.MediaType.Images,
+        allowsEditing: true,
+        aspect: [4, 3],
+        quality: 0.8,
+        base64: true,
+      });
+
+      if (!result.canceled && result.assets[0].base64) {
+        setCapturedPhoto(result.assets[0].base64);
+        setVerificationStep('questions');
+      }
+    } catch (error) {
+      console.error('Error taking photo:', error);
+      Alert.alert('Error', 'Failed to take photo. Please try again.');
+    }
+  };
+
+  const analyzePhotoWithAI = async () => {
+    if (!capturedPhoto || !selectedMedication) return;
+    
+    setVerificationStep('loading');
+    
+    try {
+      const response = await fetch(`${BACKEND_URL}/api/analyze-prescription`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          image_base64: capturedPhoto,
+          medication_name: selectedMedication.medication.name
+        })
+      });
+      
+      if (!response.ok) throw new Error('Analysis failed');
+      
+      const result = await response.json();
+      setAiAnalysisResult(result);
+      setVerificationStep('preview');
+    } catch (error) {
+      console.error('Error analyzing photo:', error);
+      Alert.alert('Error', 'Failed to analyze photo. Please try again.');
+      setVerificationStep('questions');
+    }
+  };
+
+  const submitVerification = async () => {
+    if (!selectedMedication) return;
+    
+    setVerificationStep('loading');
+    
+    try {
+      // Mark medication as taken
+      if (selectedMedication.log_id) {
+        await fetch(`${BACKEND_URL}/api/medication-logs/${selectedMedication.log_id}/take`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ verification_photo: capturedPhoto })
         });
       }
       
-      // Remove from missed list
-      setMissedMedications(prev => prev.filter(med => med.id !== logId));
+      // Simulate sending to caregiver
+      setTimeout(() => {
+        setVerificationStep('tips');
+      }, 2000);
       
-      // Refresh data
-      loadDashboardData();
     } catch (error) {
-      console.error('Error updating medication status:', error);
+      console.error('Error submitting verification:', error);
+      Alert.alert('Error', 'Failed to submit verification.');
     }
   };
 
-  const getMedicationStatus = (medication: Medication, logs: MedicationLog[]) => {
-    const now = new Date();
-    const currentTime = now.getHours() * 60 + now.getMinutes();
-    
-    for (const timeSlot of medication.time_slots) {
-      const [hours, minutes] = timeSlot.split(':').map(Number);
-      const slotTime = hours * 60 + minutes;
-      const timeDiff = Math.abs(currentTime - slotTime);
-      
-      if (timeDiff <= 30) { // Within 30 minutes
-        const log = logs.find(l => 
-          l.medication_id === medication.id && 
-          l.scheduled_time.includes(timeSlot)
-        );
-        
-        if (!log || log.status === 'pending') {
-          return 'current'; // Green - time to take
-        } else if (log.status === 'taken') {
-          return 'taken'; // Blue - already taken
-        }
-      }
-    }
-    
-    return 'upcoming'; // White - upcoming
+  const closeVerificationModal = () => {
+    setShowVerificationModal(false);
+    setSelectedMedication(null);
+    setCapturedPhoto(null);
+    setVerificationAnswers({});
+    setAiAnalysisResult(null);
+    setVerificationStep('camera');
+    loadDashboardData(); // Refresh data
   };
 
-  const getStatusColor = (status: string) => {
+  const getStatusColor = (status: MedicationTimelineItem['status']) => {
     switch (status) {
-      case 'current':
-        return '#4CAF50'; // Green
-      case 'taken':
-        return '#2196F3'; // Blue
-      case 'missed':
-        return '#F44336'; // Red
-      default:
-        return '#F5F5F5'; // Light gray
+      case 'current': return '#4CAF50'; // Green
+      case 'taken': return '#2196F3';   // Blue
+      case 'missed': return '#F44336';  // Red
+      default: return '#F5F5F5';        // White
     }
+  };
+
+  const formatTime = (date: Date) => {
+    return date.toLocaleTimeString('en-US', { 
+      hour: 'numeric', 
+      minute: '2-digit', 
+      hour12: true 
+    });
+  };
+
+  const formatDate = (date: Date) => {
+    const today = new Date().toDateString();
+    const tomorrow = new Date(Date.now() + 86400000).toDateString();
+    const yesterday = new Date(Date.now() - 86400000).toDateString();
+    
+    if (date.toDateString() === today) return 'Today';
+    if (date.toDateString() === tomorrow) return 'Tomorrow';
+    if (date.toDateString() === yesterday) return 'Yesterday';
+    
+    return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+  };
+
+  const renderMedicationItem = ({ item }: { item: MedicationTimelineItem }) => {
+    const statusColor = getStatusColor(item.status);
+    const isClickable = item.status === 'current' || item.medication.refill_info;
+    
+    return (
+      <TouchableOpacity
+        style={[styles.medicationTimelineItem, { backgroundColor: statusColor }]}
+        onPress={() => isClickable && handleMedicationPress(item)}
+        disabled={!isClickable}
+      >
+        <View style={styles.timelineItemHeader}>
+          <Text style={[styles.medicationName, { color: item.status === 'upcoming' ? '#333' : '#fff' }]}>
+            {item.medication.name}
+          </Text>
+          <Text style={[styles.medicationTime, { color: item.status === 'upcoming' ? '#666' : '#fff' }]}>
+            {formatTime(item.scheduled_time)}
+          </Text>
+        </View>
+        
+        <Text style={[styles.medicationDosage, { color: item.status === 'upcoming' ? '#666' : '#fff' }]}>
+          {item.medication.dosage}
+        </Text>
+        
+        <Text style={[styles.medicationDate, { color: item.status === 'upcoming' ? '#999' : '#fff' }]}>
+          {formatDate(item.scheduled_time)}
+        </Text>
+        
+        {item.medication.refill_info && (
+          <View style={styles.refillIndicator}>
+            <Ionicons name="refresh" size={12} color={item.status === 'upcoming' ? '#4A90E2' : '#fff'} />
+          </View>
+        )}
+        
+        {item.status === 'current' && (
+          <View style={styles.currentIndicator}>
+            <Ionicons name="camera" size={16} color="#fff" />
+          </View>
+        )}
+      </TouchableOpacity>
+    );
+  };
+
+  const renderVerificationModal = () => {
+    if (!selectedMedication) return null;
+    
+    return (
+      <Modal visible={showVerificationModal} animationType="slide" presentationStyle="formSheet">
+        <SafeAreaView style={styles.modalContainer}>
+          <View style={styles.modalHeader}>
+            <TouchableOpacity onPress={closeVerificationModal}>
+              <Ionicons name="close" size={24} color="#333" />
+            </TouchableOpacity>
+            <Text style={styles.modalTitle}>Take Medication</Text>
+            <View style={{ width: 24 }} />
+          </View>
+          
+          {verificationStep === 'camera' && (
+            <View style={styles.cameraStep}>
+              <Text style={styles.stepTitle}>Scan Your Medication</Text>
+              <Text style={styles.stepSubtitle}>Take a photo of the pills you're about to take</Text>
+              
+              <View style={styles.medicationInfo}>
+                <Text style={styles.medicationInfoText}>
+                  {selectedMedication.medication.name} - {selectedMedication.medication.dosage}
+                </Text>
+              </View>
+              
+              <TouchableOpacity style={styles.cameraButton} onPress={takeMedicationPhoto}>
+                <Ionicons name="camera" size={48} color="#fff" />
+                <Text style={styles.cameraButtonText}>Take Photo</Text>
+              </TouchableOpacity>
+            </View>
+          )}
+          
+          {verificationStep === 'questions' && (
+            <ScrollView style={styles.questionsStep}>
+              <Text style={styles.stepTitle}>Verification Questions</Text>
+              
+              {capturedPhoto && (
+                <Image
+                  source={{ uri: `data:image/jpeg;base64,${capturedPhoto}` }}
+                  style={styles.capturedPhotoPreview}
+                />
+              )}
+              
+              <View style={styles.questionsList}>
+                {[
+                  'Did you use water to take the medication?',
+                  'Did you take the correct number of pills?',
+                  'Did you take it at the right time?',
+                  'Are you feeling well to take this medication?'
+                ].map((question, index) => (
+                  <View key={index} style={styles.questionItem}>
+                    <Text style={styles.questionText}>{question}</Text>
+                    <View style={styles.questionButtons}>
+                      <TouchableOpacity
+                        style={[styles.questionButton, verificationAnswers[question] === true && styles.questionButtonSelected]}
+                        onPress={() => setVerificationAnswers(prev => ({ ...prev, [question]: true }))}
+                      >
+                        <Text style={[styles.questionButtonText, verificationAnswers[question] === true && styles.questionButtonTextSelected]}>
+                          Yes
+                        </Text>
+                      </TouchableOpacity>
+                      <TouchableOpacity
+                        style={[styles.questionButton, verificationAnswers[question] === false && styles.questionButtonSelected]}
+                        onPress={() => setVerificationAnswers(prev => ({ ...prev, [question]: false }))}
+                      >
+                        <Text style={[styles.questionButtonText, verificationAnswers[question] === false && styles.questionButtonTextSelected]}>
+                          No
+                        </Text>
+                      </TouchableOpacity>
+                    </View>
+                  </View>
+                ))}
+              </View>
+              
+              <TouchableOpacity style={styles.analyzeButton} onPress={analyzePhotoWithAI}>
+                <Text style={styles.analyzeButtonText}>Analyze & Continue</Text>
+              </TouchableOpacity>
+            </ScrollView>
+          )}
+          
+          {verificationStep === 'preview' && (
+            <View style={styles.previewStep}>
+              <Text style={styles.stepTitle}>Verification Preview</Text>
+              
+              {aiAnalysisResult && (
+                <View style={styles.analysisResult}>
+                  <Text style={styles.analysisTitle}>AI Analysis Result</Text>
+                  <Text style={styles.analysisText}>
+                    Detected: {aiAnalysisResult.medication_name}
+                  </Text>
+                  <Text style={styles.analysisText}>
+                    Dosage: {aiAnalysisResult.dosage}
+                  </Text>
+                  {aiAnalysisResult.pill_count && (
+                    <Text style={styles.analysisText}>
+                      Pills detected: {aiAnalysisResult.pill_count}
+                    </Text>
+                  )}
+                  
+                  {aiAnalysisResult.medication_name.toLowerCase() !== selectedMedication.medication.name.toLowerCase() && (
+                    <View style={styles.mismatchAlert}>
+                      <Ionicons name="warning" size={20} color="#F44336" />
+                      <Text style={styles.mismatchText}>
+                        Medication mismatch detected! Please retake the photo.
+                      </Text>
+                    </View>
+                  )}
+                </View>
+              )}
+              
+              <TouchableOpacity style={styles.submitButton} onPress={submitVerification}>
+                <Text style={styles.submitButtonText}>Submit Verification</Text>
+              </TouchableOpacity>
+            </View>
+          )}
+          
+          {verificationStep === 'loading' && (
+            <View style={styles.loadingStep}>
+              <ActivityIndicator size="large" color="#4A90E2" />
+              <Text style={styles.loadingText}>Sending information to caregiver...</Text>
+            </View>
+          )}
+          
+          {verificationStep === 'tips' && (
+            <ScrollView style={styles.tipsStep}>
+              <Text style={styles.stepTitle}>Post-Medication Tips</Text>
+              
+              <View style={styles.tipCard}>
+                <Ionicons name="checkmark-circle" size={24} color="#4CAF50" />
+                <Text style={styles.tipTitle}>Medication Taken Successfully!</Text>
+              </View>
+              
+              <View style={styles.tipsContainer}>
+                <Text style={styles.tipsTitle}>Important Reminders:</Text>
+                <Text style={styles.tipText}>• Avoid alcohol while taking this medication</Text>
+                <Text style={styles.tipText}>• Do not drive if you feel drowsy</Text>
+                <Text style={styles.tipText}>• Take with food if stomach upset occurs</Text>
+                <Text style={styles.tipText}>• Stay hydrated throughout the day</Text>
+              </View>
+              
+              <View style={styles.symptomsReminder}>
+                <Ionicons name="warning-outline" size={20} color="#FF8F00" />
+                <Text style={styles.symptomsText}>
+                  If you experience any unknown symptoms, please mark them down in your health journal. 
+                  If symptoms persist, contact your doctor immediately.
+                </Text>
+              </View>
+              
+              <TouchableOpacity style={styles.finishButton} onPress={closeVerificationModal}>
+                <Text style={styles.finishButtonText}>Done</Text>
+              </TouchableOpacity>
+            </ScrollView>
+          )}
+        </SafeAreaView>
+      </Modal>
+    );
   };
 
   const renderCalendarWeek = () => {
@@ -169,24 +535,6 @@ export default function HomeScreen({ userId }: HomeScreenProps) {
     }
     
     return days;
-  };
-
-  const renderMedicationCard = (medication: Medication) => {
-    const status = getMedicationStatus(medication, dashboardData?.today_logs || []);
-    const pillsPercentage = ((medication.total_pills - medication.remaining_pills) / medication.total_pills) * 100;
-    
-    return (
-      <View key={medication.id} style={[styles.medicationCard, { borderLeftColor: getStatusColor(status) }]}>
-        <View style={styles.medicationHeader}>
-          <Text style={styles.medicationName}>{medication.name}</Text>
-          <View style={[styles.statusIndicator, { backgroundColor: getStatusColor(status) }]} />
-        </View>
-        <Text style={styles.medicationDosage}>{medication.dosage}</Text>
-        <Text style={styles.medicationTime}>
-          Next: {medication.time_slots[0]} • {medication.remaining_pills} pills left
-        </Text>
-      </View>
-    );
   };
 
   if (loading) {
@@ -234,16 +582,10 @@ export default function HomeScreen({ userId }: HomeScreenProps) {
               YOU have missed a pill. Your caregiver has been notified.
             </Text>
             <View style={styles.missedBannerButtons}>
-              <TouchableOpacity
-                style={[styles.missedButton, styles.yesButton]}
-                onPress={() => handleMissedMedicationConfirm(missedMedications[0].id, true)}
-              >
+              <TouchableOpacity style={[styles.missedButton, styles.yesButton]}>
                 <Text style={styles.yesButtonText}>Yes, I took it</Text>
               </TouchableOpacity>
-              <TouchableOpacity
-                style={[styles.missedButton, styles.noButton]}
-                onPress={() => handleMissedMedicationConfirm(missedMedications[0].id, false)}
-              >
+              <TouchableOpacity style={[styles.missedButton, styles.noButton]}>
                 <Text style={styles.noButtonText}>No, I haven't</Text>
               </TouchableOpacity>
             </View>
@@ -264,10 +606,25 @@ export default function HomeScreen({ userId }: HomeScreenProps) {
           </View>
         </View>
 
-        {/* Today's Medications */}
-        <View style={styles.medicationsSection}>
-          <Text style={styles.sectionTitle}>Today's Schedule</Text>
-          {dashboardData?.medications.map(renderMedicationCard)}
+        {/* Medication Timeline */}
+        <View style={styles.timelineSection}>
+          <Text style={styles.sectionTitle}>Medication Schedule</Text>
+          <Text style={styles.timelineSubtitle}>Scroll to see past and upcoming medications</Text>
+          
+          <FlatList
+            ref={timelineRef}
+            data={medicationTimeline}
+            renderItem={renderMedicationItem}
+            keyExtractor={item => item.id}
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={styles.timelineContainer}
+            getItemLayout={(data, index) => ({
+              length: 160,
+              offset: 160 * index,
+              index,
+            })}
+          />
         </View>
 
         {/* Health Tip */}
@@ -278,6 +635,8 @@ export default function HomeScreen({ userId }: HomeScreenProps) {
           </Text>
         </View>
       </ScrollView>
+      
+      {renderVerificationModal()}
     </SafeAreaView>
   );
 }
@@ -454,54 +813,54 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
     color: '#333333',
   },
-  medicationsSection: {
+  timelineSection: {
     marginBottom: 24,
   },
-  medicationCard: {
-    backgroundColor: '#ffffff',
-    borderRadius: 12,
-    padding: 16,
-    marginBottom: 12,
-    borderLeftWidth: 4,
-    ...Platform.select({
-      ios: {
-        shadowColor: '#000',
-        shadowOffset: { width: 0, height: 2 },
-        shadowOpacity: 0.1,
-        shadowRadius: 4,
-      },
-      android: {
-        elevation: 3,
-      },
-      web: {
-        boxShadow: '0px 2px 4px rgba(0, 0, 0, 0.1)',
-      },
-    }),
-  },
-  medicationHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 8,
-  },
-  medicationName: {
-    fontSize: 18,
-    fontWeight: 'bold',
-    color: '#333333',
-  },
-  statusIndicator: {
-    width: 12,
-    height: 12,
-    borderRadius: 6,
-  },
-  medicationDosage: {
+  timelineSubtitle: {
     fontSize: 14,
     color: '#666666',
+    marginBottom: 16,
+  },
+  timelineContainer: {
+    paddingVertical: 8,
+  },
+  medicationTimelineItem: {
+    width: 150,
+    height: 120,
+    borderRadius: 12,
+    padding: 12,
+    marginRight: 12,
+    justifyContent: 'space-between',
+    position: 'relative',
+  },
+  timelineItemHeader: {
+    flexDirection: 'column',
+  },
+  medicationName: {
+    fontSize: 14,
+    fontWeight: 'bold',
     marginBottom: 4,
   },
   medicationTime: {
-    fontSize: 14,
-    color: '#4A90E2',
+    fontSize: 12,
+    fontWeight: '600',
+  },
+  medicationDosage: {
+    fontSize: 12,
+  },
+  medicationDate: {
+    fontSize: 10,
+    opacity: 0.8,
+  },
+  refillIndicator: {
+    position: 'absolute',
+    top: 8,
+    right: 8,
+  },
+  currentIndicator: {
+    position: 'absolute',
+    bottom: 8,
+    right: 8,
   },
   healthTip: {
     flexDirection: 'row',
@@ -516,5 +875,237 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: '#FF8F00',
     lineHeight: 20,
+  },
+  
+  // Modal styles
+  modalContainer: {
+    flex: 1,
+    backgroundColor: '#ffffff',
+  },
+  modalHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    padding: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: '#E0E0E0',
+  },
+  modalTitle: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    color: '#333333',
+  },
+  cameraStep: {
+    flex: 1,
+    padding: 20,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  stepTitle: {
+    fontSize: 24,
+    fontWeight: 'bold',
+    color: '#333333',
+    marginBottom: 8,
+    textAlign: 'center',
+  },
+  stepSubtitle: {
+    fontSize: 16,
+    color: '#666666',
+    marginBottom: 32,
+    textAlign: 'center',
+  },
+  medicationInfo: {
+    backgroundColor: '#F0F8FF',
+    padding: 16,
+    borderRadius: 8,
+    marginBottom: 32,
+  },
+  medicationInfoText: {
+    fontSize: 16,
+    color: '#4A90E2',
+    fontWeight: '600',
+    textAlign: 'center',
+  },
+  cameraButton: {
+    backgroundColor: '#4A90E2',
+    width: 120,
+    height: 120,
+    borderRadius: 60,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  cameraButtonText: {
+    color: '#ffffff',
+    fontSize: 14,
+    fontWeight: 'bold',
+    marginTop: 8,
+  },
+  questionsStep: {
+    flex: 1,
+    padding: 20,
+  },
+  capturedPhotoPreview: {
+    width: '100%',
+    height: 200,
+    borderRadius: 8,
+    marginBottom: 24,
+  },
+  questionsList: {
+    marginBottom: 24,
+  },
+  questionItem: {
+    marginBottom: 20,
+  },
+  questionText: {
+    fontSize: 16,
+    color: '#333333',
+    marginBottom: 12,
+  },
+  questionButtons: {
+    flexDirection: 'row',
+    gap: 12,
+  },
+  questionButton: {
+    flex: 1,
+    padding: 12,
+    borderRadius: 8,
+    borderWidth: 2,
+    borderColor: '#E0E0E0',
+    alignItems: 'center',
+  },
+  questionButtonSelected: {
+    borderColor: '#4A90E2',
+    backgroundColor: '#F0F8FF',
+  },
+  questionButtonText: {
+    fontSize: 14,
+    color: '#666666',
+  },
+  questionButtonTextSelected: {
+    color: '#4A90E2',
+    fontWeight: 'bold',
+  },
+  analyzeButton: {
+    backgroundColor: '#4A90E2',
+    padding: 16,
+    borderRadius: 8,
+    alignItems: 'center',
+  },
+  analyzeButtonText: {
+    color: '#ffffff',
+    fontSize: 16,
+    fontWeight: 'bold',
+  },
+  previewStep: {
+    flex: 1,
+    padding: 20,
+  },
+  analysisResult: {
+    backgroundColor: '#F8F9FA',
+    padding: 16,
+    borderRadius: 8,
+    marginBottom: 24,
+  },
+  analysisTitle: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    color: '#333333',
+    marginBottom: 12,
+  },
+  analysisText: {
+    fontSize: 14,
+    color: '#666666',
+    marginBottom: 4,
+  },
+  mismatchAlert: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#FFEBEE',
+    padding: 12,
+    borderRadius: 8,
+    marginTop: 12,
+  },
+  mismatchText: {
+    flex: 1,
+    marginLeft: 8,
+    fontSize: 14,
+    color: '#F44336',
+  },
+  submitButton: {
+    backgroundColor: '#4CAF50',
+    padding: 16,
+    borderRadius: 8,
+    alignItems: 'center',
+  },
+  submitButtonText: {
+    color: '#ffffff',
+    fontSize: 16,
+    fontWeight: 'bold',
+  },
+  loadingStep: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  tipsStep: {
+    flex: 1,
+    padding: 20,
+  },
+  tipCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#E8F5E8',
+    padding: 16,
+    borderRadius: 8,
+    marginBottom: 24,
+  },
+  tipTitle: {
+    marginLeft: 12,
+    fontSize: 16,
+    fontWeight: 'bold',
+    color: '#4CAF50',
+  },
+  tipsContainer: {
+    backgroundColor: '#F8F9FA',
+    padding: 16,
+    borderRadius: 8,
+    marginBottom: 24,
+  },
+  tipsTitle: {
+    fontSize: 16,
+    fontWeight: 'bold',
+    color: '#333333',
+    marginBottom: 12,
+  },
+  tipText: {
+    fontSize: 14,
+    color: '#666666',
+    marginBottom: 6,
+    lineHeight: 20,
+  },
+  symptomsReminder: {
+    flexDirection: 'row',
+    backgroundColor: '#FFF8E1',
+    padding: 16,
+    borderRadius: 8,
+    marginBottom: 24,
+  },
+  symptomsText: {
+    flex: 1,
+    marginLeft: 12,
+    fontSize: 14,
+    color: '#FF8F00',
+    lineHeight: 20,
+  },
+  finishButton: {
+    backgroundColor: '#4A90E2',
+    padding: 16,
+    borderRadius: 8,
+    alignItems: 'center',
+  },
+  finishButtonText: {
+    color: '#ffffff',
+    fontSize: 16,
+    fontWeight: 'bold',
   },
 });
