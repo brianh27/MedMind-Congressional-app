@@ -276,7 +276,23 @@ export default function HomeScreen({ userId }: HomeScreenProps) {
     }
   };
 
-  const closeVerificationModal = () => {
+  const addSampleMedications = async () => {
+    try {
+      const response = await fetch(`${BACKEND_URL}/api/medications/${userId}/add-samples`, {
+        method: 'POST',
+      });
+      
+      if (response.ok) {
+        Alert.alert(
+          'Sample Medications Added', 
+          'Added sample medications to demonstrate the timeline features!',
+          [{ text: 'OK', onPress: () => loadDashboardData() }]
+        );
+      }
+    } catch (error) {
+      console.error('Error adding sample medications:', error);
+    }
+  };
     setShowVerificationModal(false);
     setSelectedMedication(null);
     setCapturedPhoto(null);
