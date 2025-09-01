@@ -293,6 +293,8 @@ export default function HomeScreen({ userId }: HomeScreenProps) {
       console.error('Error adding sample medications:', error);
     }
   };
+
+  const closeVerificationModal = () => {
     setShowVerificationModal(false);
     setSelectedMedication(null);
     setCapturedPhoto(null);
