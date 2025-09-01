@@ -295,6 +295,45 @@ export default function HomeScreen({ userId }: HomeScreenProps) {
     }
   };
 
+  const sendTestNotification = async () => {
+    try {
+      // Request notification permissions first
+      const { status } = await Notifications.getPermissionsAsync();
+      if (status !== 'granted') {
+        const { status: newStatus } = await Notifications.requestPermissionsAsync();
+        if (newStatus !== 'granted') {
+          Alert.alert('Permission Denied', 'Cannot send notifications without permission');
+          return;
+        }
+      }
+
+      // Send a test notification
+      await Notifications.scheduleNotificationAsync({
+        content: {
+          title: "💊 MedMind Reminder",
+          body: "Time to take your Lisinopril 10mg. Don't forget to use water!",
+          data: { 
+            medicationId: 'test-med-123',
+            timestamp: new Date().toISOString(),
+            type: 'medication_reminder'
+          },
+        },
+        trigger: null, // Send immediately
+      });
+
+      Alert.alert(
+        'Debug Notification Sent! 📱',
+        'Check your notifications panel to see the test medication reminder.',
+        [{ text: 'OK' }]
+      );
+      
+      console.log('Debug notification sent successfully');
+    } catch (error) {
+      console.error('Error sending test notification:', error);
+      Alert.alert('Error', 'Failed to send test notification: ' + error.message);
+    }
+  };
+
   const closeVerificationModal = () => {
     setShowVerificationModal(false);
     setSelectedMedication(null);
