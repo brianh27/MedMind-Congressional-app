@@ -672,12 +672,19 @@ export default function HomeScreen({ userId }: HomeScreenProps) {
               <Text style={styles.timelineSubtitle}>Scroll to see past and upcoming medications</Text>
             </View>
             
-            {medicationTimeline.length === 0 && (
-              <TouchableOpacity style={styles.addSampleButton} onPress={addSampleMedications}>
-                <Ionicons name="add" size={16} color="#ffffff" />
-                <Text style={styles.addSampleButtonText}>Demo</Text>
+            <View style={styles.debugButtonsContainer}>
+              {medicationTimeline.length === 0 && (
+                <TouchableOpacity style={styles.addSampleButton} onPress={addSampleMedications}>
+                  <Ionicons name="add" size={16} color="#ffffff" />
+                  <Text style={styles.addSampleButtonText}>Demo</Text>
+                </TouchableOpacity>
+              )}
+              
+              <TouchableOpacity style={styles.debugNotificationButton} onPress={sendTestNotification}>
+                <Ionicons name="notifications" size={16} color="#ffffff" />
+                <Text style={styles.debugButtonText}>Send Notification</Text>
               </TouchableOpacity>
-            )}
+            </View>
           </View>
           
           {medicationTimeline.length > 0 ? (
