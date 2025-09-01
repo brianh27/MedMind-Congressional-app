@@ -10,6 +10,9 @@ import {
   RefreshControl,
   Dimensions,
   Platform,
+  FlatList,
+  Modal,
+  Image,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useFocusEffect } from '@react-navigation/native';
