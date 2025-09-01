@@ -458,6 +458,62 @@ async def update_health_journal_entry(entry_id: str, entry_update: HealthJournal
     updated_entry = await db.health_journal.find_one({"id": entry_id})
     return HealthJournalEntry(**updated_entry)
 
+# Sample Data Routes for Demo
+@api_router.post("/medications/{user_id}/add-samples")
+async def add_sample_medications(user_id: str):
+    try:
+        # Sample medications with different time slots
+        sample_meds = [
+            {
+                "user_id": user_id,
+                "name": "Lisinopril",
+                "dosage": "10mg",
+                "frequency": "once daily",
+                "time_slots": ["08:00"],
+                "total_pills": 30,
+                "remaining_pills": 25,
+                "refill_info": {
+                    "pharmacy_name": "CVS Pharmacy",
+                    "address": "123 Main St, City, State",
+                    "refill_date": "2025-09-15"
+                }
+            },
+            {
+                "user_id": user_id,
+                "name": "Metformin",
+                "dosage": "500mg",
+                "frequency": "twice daily",
+                "time_slots": ["08:00", "20:00"],
+                "total_pills": 60,
+                "remaining_pills": 45,
+                "refill_info": {
+                    "pharmacy_name": "Walgreens",
+                    "address": "456 Oak Ave, City, State",
+                    "refill_date": "2025-09-20"
+                }
+            },
+            {
+                "user_id": user_id,
+                "name": "Vitamin D3",
+                "dosage": "1000 IU",
+                "frequency": "once daily",
+                "time_slots": ["12:00"],
+                "total_pills": 90,
+                "remaining_pills": 80,
+            }
+        ]
+        
+        # Add medications to database
+        for med_data in sample_meds:
+            medication_obj = Medication(**med_data)
+            await db.medications.insert_one(medication_obj.dict())
+            
+        return {"message": f"Added {len(sample_meds)} sample medications"}
+        
+    except Exception as e:
+        logging.error(f"Error adding sample medications: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Failed to add sample medications: {str(e)}")
+
 # Dashboard/Stats Routes
 @api_router.get("/dashboard/{user_id}")
 async def get_user_dashboard(user_id: str):
