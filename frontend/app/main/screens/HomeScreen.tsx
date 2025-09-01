@@ -624,23 +624,42 @@ export default function HomeScreen({ userId }: HomeScreenProps) {
 
         {/* Medication Timeline */}
         <View style={styles.timelineSection}>
-          <Text style={styles.sectionTitle}>Medication Schedule</Text>
-          <Text style={styles.timelineSubtitle}>Scroll to see past and upcoming medications</Text>
+          <View style={styles.timelineSectionHeader}>
+            <View>
+              <Text style={styles.sectionTitle}>Medication Schedule</Text>
+              <Text style={styles.timelineSubtitle}>Scroll to see past and upcoming medications</Text>
+            </View>
+            
+            {medicationTimeline.length === 0 && (
+              <TouchableOpacity style={styles.addSampleButton} onPress={addSampleMedications}>
+                <Ionicons name="add" size={16} color="#ffffff" />
+                <Text style={styles.addSampleButtonText}>Demo</Text>
+              </TouchableOpacity>
+            )}
+          </View>
           
-          <FlatList
-            ref={timelineRef}
-            data={medicationTimeline}
-            renderItem={renderMedicationItem}
-            keyExtractor={item => item.id}
-            horizontal
-            showsHorizontalScrollIndicator={false}
-            contentContainerStyle={styles.timelineContainer}
-            getItemLayout={(data, index) => ({
-              length: 160,
-              offset: 160 * index,
-              index,
-            })}
-          />
+          {medicationTimeline.length > 0 ? (
+            <FlatList
+              ref={timelineRef}
+              data={medicationTimeline}
+              renderItem={renderMedicationItem}
+              keyExtractor={item => item.id}
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              contentContainerStyle={styles.timelineContainer}
+              getItemLayout={(data, index) => ({
+                length: 160,
+                offset: 160 * index,
+                index,
+              })}
+            />
+          ) : (
+            <View style={styles.emptyTimeline}>
+              <Ionicons name="medical-outline" size={48} color="#CCCCCC" />
+              <Text style={styles.emptyTimelineText}>No medications scheduled</Text>
+              <Text style={styles.emptyTimelineSubtext}>Tap "Demo" to see timeline features</Text>
+            </View>
+          )}
         </View>
 
         {/* Health Tip */}
