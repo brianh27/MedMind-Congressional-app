@@ -906,6 +906,11 @@ const styles = StyleSheet.create({
     alignItems: 'flex-start',
     marginBottom: 16,
   },
+  debugButtonsContainer: {
+    flexDirection: 'row',
+    gap: 8,
+    alignItems: 'center',
+  },
   timelineSubtitle: {
     fontSize: 14,
     color: '#666666',
@@ -922,6 +927,20 @@ const styles = StyleSheet.create({
   },
   addSampleButtonText: {
     fontSize: 12,
+    color: '#ffffff',
+    fontWeight: 'bold',
+  },
+  debugNotificationButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#FF6B35',
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+    borderRadius: 16,
+    gap: 4,
+  },
+  debugButtonText: {
+    fontSize: 10,
     color: '#ffffff',
     fontWeight: 'bold',
   },
