@@ -851,10 +851,47 @@ const styles = StyleSheet.create({
   timelineSection: {
     marginBottom: 24,
   },
+  timelineSectionHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'flex-start',
+    marginBottom: 16,
+  },
   timelineSubtitle: {
     fontSize: 14,
     color: '#666666',
-    marginBottom: 16,
+    marginTop: 4,
+  },
+  addSampleButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#4A90E2',
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 16,
+    gap: 4,
+  },
+  addSampleButtonText: {
+    fontSize: 12,
+    color: '#ffffff',
+    fontWeight: 'bold',
+  },
+  emptyTimeline: {
+    alignItems: 'center',
+    padding: 40,
+    backgroundColor: '#F8F9FA',
+    borderRadius: 12,
+  },
+  emptyTimelineText: {
+    fontSize: 16,
+    color: '#666666',
+    marginTop: 12,
+    fontWeight: '500',
+  },
+  emptyTimelineSubtext: {
+    fontSize: 14,
+    color: '#999999',
+    marginTop: 4,
   },
   timelineContainer: {
     paddingVertical: 8,
