@@ -207,7 +207,7 @@ export default function HomeScreen({ userId }: HomeScreenProps) {
       }
 
       const result = await ImagePicker.launchCameraAsync({
-        mediaTypes: ImagePicker.MediaType.Images,
+        mediaTypes: ImagePicker.MediaTypeOptions.Images,
         allowsEditing: true,
         aspect: [4, 3],
         quality: 0.8,
@@ -644,7 +644,7 @@ export default function HomeScreen({ userId }: HomeScreenProps) {
                 <Text style={styles.yesButtonText}>Yes, I took it</Text>
               </TouchableOpacity>
               <TouchableOpacity style={[styles.missedButton, styles.noButton]}>
-                <Text style={styles.noButtonText}>No, I haven't</Text>
+                <Text style={styles.noButtonText}>No, I haven{`'`}t</Text>
               </TouchableOpacity>
             </View>
           </View>
@@ -706,7 +706,7 @@ export default function HomeScreen({ userId }: HomeScreenProps) {
             <View style={styles.emptyTimeline}>
               <Ionicons name="medical-outline" size={48} color="#CCCCCC" />
               <Text style={styles.emptyTimelineText}>No medications scheduled</Text>
-              <Text style={styles.emptyTimelineSubtext}>Tap "Demo" to see timeline features</Text>
+              <Text style={styles.emptyTimelineSubtext}>Tap {`"`}Demo{`"`} to see timeline features</Text>
             </View>
           )}
         </View>

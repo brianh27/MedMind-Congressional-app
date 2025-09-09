@@ -507,7 +507,7 @@ export default function OnboardingFlow({ onComplete }: OnboardingFlowProps) {
               <Ionicons name="checkmark-circle" size={80} color="#4CAF50" />
               <Text style={styles.completionTitle}>Setup Complete!</Text>
               <Text style={styles.completionSubtitle}>
-                Welcome to MedMind! You're all set to start managing your medication schedule.
+                Welcome to MedMind! You{`'`}re all set to start managing your medication schedule.
               </Text>
             </View>
           </View>
