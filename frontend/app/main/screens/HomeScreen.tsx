@@ -330,7 +330,7 @@ export default function HomeScreen({ userId }: HomeScreenProps) {
       console.log('Debug notification sent successfully');
     } catch (error) {
       console.error('Error sending test notification:', error);
-      Alert.alert('Error', 'Failed to send test notification: ' + error.message);
+      Alert.alert('Error', 'Failed to send test notification: ' + (error instanceof Error ? error.message : String(error)));
     }
   };
 
@@ -432,7 +432,7 @@ export default function HomeScreen({ userId }: HomeScreenProps) {
           {verificationStep === 'camera' && (
             <View style={styles.cameraStep}>
               <Text style={styles.stepTitle}>Scan Your Medication</Text>
-              <Text style={styles.stepSubtitle}>Take a photo of the pills you're about to take</Text>
+              <Text style={styles.stepSubtitle}>Take a photo of the pills you{`'`}re about to take</Text>
               
               <View style={styles.medicationInfo}>
                 <Text style={styles.medicationInfoText}>
